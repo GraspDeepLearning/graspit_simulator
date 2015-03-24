@@ -62,9 +62,6 @@ class GraspableBody;
 #include "graspit_ros_planning_msgs/GenerateGrasp.h"
 #include "graspit_ros_planning_msgs/VerifyGrasp.h"
 
-#include "graspit_ros_planning_msgs/LoadLocalModel.h"
-#include "graspit_ros_planning_msgs/GenerateGrasps.h"
-
 namespace graspit_ros_planning
 {
 
@@ -93,7 +90,6 @@ private:
 
   //! Server for the load model service
   ros::ServiceServer load_model_srv_;
-  ros::ServiceServer load_local_model_srv_;
 
   //! Server for the load obstacle service
   ros::ServiceServer load_obstacle_srv_;
@@ -112,7 +108,6 @@ private:
 
   //! Server for the generate grasp service
   ros::ServiceServer generate_grasp_srv_;
-  ros::ServiceServer generate_grasps_srv_;
 
   //! Server for the grasp collision checking service
   ros::ServiceServer verify_grasp_srv_;
@@ -199,16 +194,6 @@ private:
   //! Callback for the grasp verifying service, for PR2 gripper
   bool verifyGraspCB(graspit_ros_planning_msgs::VerifyGrasp::Request &request,
                      graspit_ros_planning_msgs::VerifyGrasp::Response &response);
-
-
-  //THESE ARE ADDED FOR GRASP GENERATION
-  //! Callback for the load model service
-  bool loadLocalModelCB(graspit_ros_planning_msgs::LoadLocalModel::Request &request,
-                   graspit_ros_planning_msgs::LoadLocalModel::Response &response);
-
-  //! Callback for the grasp generation service, for PR2 gripper
-  bool generateGraspsCB(graspit_ros_planning_msgs::GenerateGrasps::Request &request,
-                       graspit_ros_planning_msgs::GenerateGrasps::Response &response);
 
 
 public:

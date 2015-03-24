@@ -52,10 +52,7 @@
 
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/point_cloud_conversion.h>
-#include <include/EGPlanner/egPlanner.h>
-#include <include/EGPlanner/simAnnPlanner.h>
-#include <include/EGPlanner/searchState.h>
-#include <include/grasp.h>
+
 //------------------------- Convenience functions -------------------------------
 
 template<typename T>
@@ -217,7 +214,6 @@ int RosGraspitInterface::init(int argc, char **argv)
   priv_nh_ = new ros::NodeHandle("~");
   //advertise service in private namespace
   load_model_srv_ = priv_nh_->advertiseService("load_database_model", &RosGraspitInterface::loadModelCB, this);
-  load_local_model_srv_ = priv_nh_->advertiseService("load_local_model", &RosGraspitInterface::loadLocalModelCB, this);
   load_obstacle_srv_ = priv_nh_->advertiseService("load_obstacle", &RosGraspitInterface::loadObstacleCB, this);
   clear_bodies_srv_ = priv_nh_->advertiseService("clear_bodies", &RosGraspitInterface::clearBodiesCB, this);
   simulate_scan_srv_ = priv_nh_->advertiseService("simulate_scan", &RosGraspitInterface::simulateScanCB, this);
@@ -225,7 +221,6 @@ int RosGraspitInterface::init(int argc, char **argv)
   grasp_planning_srv_ = priv_nh_->advertiseService("grasp_planning", &RosGraspitInterface::graspPlanningCB, this);
 
   generate_grasp_srv_ = priv_nh_->advertiseService("generate_grasp", &RosGraspitInterface::generateGraspCB, this);
-  generate_grasps_srv_ = priv_nh_->advertiseService("generate_grasps", &RosGraspitInterface::generateGraspsCB, this);
 
   scan_publisher_ = priv_nh_->advertise<sensor_msgs::PointCloud2> ("simulated_scans", 5);
 
@@ -234,9 +229,7 @@ int RosGraspitInterface::init(int argc, char **argv)
   srand(1);
   //initialize database connection
   //careful: we pass a null for the grasp allocator as we don't know yet which hand we'll be using
-  //db_mgr_ = new db_planner::RosDatabaseManager("wgs36", "5432", "willow", "willow", "household_objects", NULL, NULL);
-  db_mgr_ = new db_planner::RosDatabaseManager("tonga.cs.columbia.edu", "5432", "postgres", "roboticslab", "household_objects", NULL, NULL);
-  //db_mgr_ = new db_planner::RosDatabaseManager("tonga.cs.columbia.edu", "5432", "postgres", "roboticslab", "armdb", NULL, NULL);
+  db_mgr_ = new db_planner::RosDatabaseManager("wgs36", "5432", "willow", "willow", "household_objects", NULL, NULL);
   //use the special allocator for models that get geometry directly from the database
   GeomGraspitDBModelAllocator* allocator = new GeomGraspitDBModelAllocator(db_mgr_);
   db_mgr_->SetModelAllocator(allocator);
@@ -349,37 +342,6 @@ bool RosGraspitInterface::loadModelCB(graspit_ros_planning_msgs::LoadDatabaseMod
   //set the correct transform
   model->getGraspableBody()->setTran(poseToTransf(request.model_pose));
   model->getGraspableBody()->showAxes(false);
-  response.result = response.LOAD_SUCCESS;
-  return true;
-}
-
-
-//this is added for GDL
-bool RosGraspitInterface::loadLocalModelCB(graspit_ros_planning_msgs::LoadLocalModel::Request &request,
-                                      graspit_ros_planning_msgs::LoadLocalModel::Response &response)
-{
-   World *world = graspItGUI->getIVmgr()->getWorld();
-
-  //if requested, if there are any models in the world that are not this one, remove them
-  if (request.clear_other_models)
-  {
-      for (int i = 0; i < world->getNumGB(); i++)
-      {
-          world->destroyElement(world->getGB(i), false);
-      }
-  }
-
-  QString body_file = QString(getenv("GRASPIT")) + "/" +  "models/objects/" + request.model_name.data.c_str();
-  Body *b = graspItGUI->getIVmgr()->getWorld()->importBody("GraspableBody", body_file);
-
-  if (!b)
-  {
-       ROS_ERROR("Failed to load model %s", request.model_name.data.c_str());
-       return false;
-  }
-
-  b->setTran(poseToTransf(request.model_pose));
-
   response.result = response.LOAD_SUCCESS;
   return true;
 }
@@ -1010,130 +972,6 @@ bool RosGraspitInterface::generateGraspCB(graspit_ros_planning_msgs::GenerateGra
   response.gripper_tabletop_clearance = gripper_tabletop_clearance;
   response.gripper_object_distance = gripper_object_distance;
   response.result = response.GENERATE_SUCCESS;
-  return true;
-
-}
-
-bool RosGraspitInterface::generateGraspsCB(graspit_ros_planning_msgs::GenerateGrasps::Request &request,
-                                          graspit_ros_planning_msgs::GenerateGrasps::Response &response)
-{
-  // The resulted grasp pose doesn't guarantee that the object will be reasonably close to the gripper. (Generating voxelgrid using this grasp pose might get a completedly free voxelgrid)
-
-  response.result = response.GENERATE_FAILURE;
-
-  // Load the requested object to graspit and clear other objects
-  graspit_ros_planning_msgs::LoadLocalModel::Request req_load_object;
-  graspit_ros_planning_msgs::LoadLocalModel::Response res_load_object;
-
-  static int last_model_id = 0;
-  static int acc_count = 1;
-
-  // object's pose will coincides with world frame, to simplify everything
-  req_load_object.model_name = request.model_name;
-  req_load_object.model_pose = geometry_msgs::Pose();
-  req_load_object.model_pose.orientation.w = 1.0;
-  req_load_object.clear_other_models = true;
-
-  loadLocalModelCB(req_load_object, res_load_object);
-
-  if (res_load_object.result == res_load_object.LOAD_FAILURE)
-  {
-    response.result = response.GENERATE_FAILURE;
-    ROS_INFO_STREAM("Object loaded failed!");
-    return true;
-  }
-
-  //ROS_INFO_STREAM("Object loaded successful!");
-
-  World *world = graspItGUI->getIVmgr()->getWorld();
-
-
-  // Load gripper to the scene
-  if (!gripper_ && !loadGripper())
-  {
-    response.result = response.GENERATE_FAILURE;
-    return true;
-  }
-
-  //add table if requested
-  Body *obstacle = NULL;
-  if (request.request_tabletop)
-  {
-    std::string filename = getenv("GRASPIT") + std::string("/") + request.tabletop_file_name;
-
-    for (int i = 0; i < world->getNumBodies(); i++)
-    {
-      if (world->getBody(i)->getFilename().compare(QString(request.tabletop_file_name.c_str())) == 0)
-      {
-        obstacle = world->getBody(i);
-        break;
-      }
-    }
-
-    graspit_ros_planning_msgs::LoadObstacle::Request req_load_obstacle;
-    req_load_obstacle.file_name = request.tabletop_file_name;
-    req_load_obstacle.obstacle_pose = geometry_msgs::Pose();
-    req_load_obstacle.obstacle_pose.orientation.w = 1.0;
-
-    if (obstacle == NULL)
-    {
-      graspit_ros_planning_msgs::LoadObstacle::Response res_load_obstacle;
-      loadObstacleCB(req_load_obstacle, res_load_obstacle);
-
-      if (res_load_obstacle.result == graspit_ros_planning_msgs::LoadObstacle::Response::LOAD_FAILURE)
-      {
-        response.result = response.GENERATE_FAILURE;
-        ROS_WARN_STREAM("Tabletop load failed!");
-        return true;
-      }
-      for (int i = 0; i < world->getNumBodies(); i++)
-      {
-        if (world->getBody(i)->getFilename().compare(QString(request.tabletop_file_name.c_str())) == 0)
-        {
-          obstacle = world->getBody(i);
-          break;
-        }
-      }
-    }
-  }
-
-
-
-//   GraspPlanningState *mHandObjectState = new GraspPlanningState(gripper_);
-
-//   Body *b = world->getGB(0);
-
-//   gripper_->getGrasp()->setObjectNoUpdate(b);
-//   mHandObjectState->setObject(b);
-//   mHandObjectState->setRefTran(mObject->getTran());
-
-
-//   mHand->getGrasp()->setGravity(false);
-//   mHandObjectState->setPositionType(SPACE_AXIS_ANGLE);
-
-   //init grasp planner
-    EGPlanner *mPlanner = new SimAnnPlanner(gripper_);
-    mPlanner->setEnergyType(ENERGY_CONTACT_QUALITY);
-    mPlanner->setMaxSteps(70000);
-   //((SimAnnPlanner*)mPlanner)->setModelState(mHandObjectState);
-   mPlanner->startPlanner();
-
-   while(mPlanner->isRunning())
-   {
-       sleep(100);
-       ROS_INFO_STREAM("Planner is runnning");
-   }
-
-
-
-//  ROS_INFO_STREAM( "Random grasp pose:" << grasp_random_pose << " grasp joint angle " << gripper_->getDOF(0)->getVal() <<" energy " << test_grasp_res.energy_value );
-//  ROS_INFO_STREAM("Number of objects "<<world->getNumBodies());
-//  response.grasp_pose = grasp_random_pose;
-//  response.grasp_energy = test_grasp_res.energy_value;
-//  response.grasp_joint_angle = gripper_->getDOF(0)->getVal();
-//  response.gripper_tabletop_clearance = gripper_tabletop_clearance;
-//  response.gripper_object_distance = gripper_object_distance;
-//  response.result = response.GENERATE_SUCCESS;
   return true;
 
 }

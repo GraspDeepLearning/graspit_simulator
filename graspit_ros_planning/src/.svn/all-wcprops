@@ -1,0 +1,17 @@
+K 25
+svn:wc:ra_dav:version-url
+V 86
+/svn/wg-ros-pkg/!svn/ver/55307/stacks/graspit_simulator/trunk/graspit_ros_planning/src
+END
+main.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 95
+/svn/wg-ros-pkg/!svn/ver/55163/stacks/graspit_simulator/trunk/graspit_ros_planning/src/main.cpp
+END
+ros_graspit_interface.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 112
+/svn/wg-ros-pkg/!svn/ver/55307/stacks/graspit_simulator/trunk/graspit_ros_planning/src/ros_graspit_interface.cpp
+END
