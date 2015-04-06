@@ -1097,32 +1097,34 @@ bool RosGraspitInterface::generateGraspsCB(graspit_ros_planning_msgs::GenerateGr
     }
   }
 
+  GraspPlanningState *mHandObjectState = new GraspPlanningState(gripper_);
+
+  GraspableBody *b = world->getGB(0);
+
+  gripper_->getGrasp()->setObjectNoUpdate(b);
+  mHandObjectState->setObject(b);
+  mHandObjectState->setRefTran(b->getTran());
 
 
-//   GraspPlanningState *mHandObjectState = new GraspPlanningState(gripper_);
+  gripper_->getGrasp()->setGravity(false);
+  mHandObjectState->setPositionType(SPACE_AXIS_ANGLE);
 
-//   Body *b = world->getGB(0);
+  //init grasp planner
+  EGPlanner *mPlanner = new SimAnnPlanner(gripper_);
+  ((SimAnnPlanner*)mPlanner)->setModelState(mHandObjectState);
 
-//   gripper_->getGrasp()->setObjectNoUpdate(b);
-//   mHandObjectState->setObject(b);
-//   mHandObjectState->setRefTran(mObject->getTran());
+  mPlanner->resetPlanner();
+  mPlanner->setEnergyType(ENERGY_CONTACT_QUALITY);
+  mPlanner->setMaxSteps(70000);
 
+  // Planner state needs to be "READY" first, otherwise error "Planner not ready to start!"
+  mPlanner->startPlanner();
 
-//   mHand->getGrasp()->setGravity(false);
-//   mHandObjectState->setPositionType(SPACE_AXIS_ANGLE);
-
-   //init grasp planner
-    EGPlanner *mPlanner = new SimAnnPlanner(gripper_);
-    mPlanner->setEnergyType(ENERGY_CONTACT_QUALITY);
-    mPlanner->setMaxSteps(70000);
-   //((SimAnnPlanner*)mPlanner)->setModelState(mHandObjectState);
-   mPlanner->startPlanner();
-
-   while(mPlanner->isRunning())
-   {
-       sleep(100);
-       ROS_INFO_STREAM("Planner is runnning");
-   }
+  while(mPlanner->isRunning())
+  {
+     sleep(100);
+     ROS_INFO_STREAM("Planner is runnning");
+  }
 
 
 
