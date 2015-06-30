@@ -4,7 +4,12 @@ project(graspit_ros_planning_msgs)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED sensor_msgs geometry_msgs manipulation_msgs)
+find_package(catkin REQUIRED COMPONENTS 
+            sensor_msgs 
+            geometry_msgs
+            message_generation
+            manipulation_msgs
+            std_msgs)
 
 
 ## System dependencies are found with CMake's conventions
@@ -48,12 +53,13 @@ find_package(catkin REQUIRED sensor_msgs geometry_msgs manipulation_msgs)
 # )
 
 ## Generate services in the 'srv' folder
- add_service_files(
+add_service_files(
    FILES
    ClearBodies.srv
    GenerateGrasp.srv
    GenerateGrasps.srv
    LoadDatabaseModel.srv
+   LoadLocalGripper.srv
    LoadLocalModel.srv
    LoadObstacle.srv
    SimulateScan.srv
@@ -71,7 +77,7 @@ find_package(catkin REQUIRED sensor_msgs geometry_msgs manipulation_msgs)
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
    DEPENDENCIES
-   std_msgs  # Or other packages containing msgs
+   std_msgs  
    sensor_msgs
    geometry_msgs
    manipulation_msgs

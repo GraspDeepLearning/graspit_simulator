@@ -1,0 +1,11 @@
+# Instructs GraspIt to load a local gripper which is located in
+# models/robots
+
+# name of the model (folder/name.xml) e.g:BaxterHand/baxter_hand.xml
+std_msgs/String gripper_name
+
+---
+
+int32 LOAD_SUCCESS = 0
+int32 LOAD_FAILURE = 1
+int32 result
