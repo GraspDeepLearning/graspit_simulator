@@ -18,7 +18,7 @@ find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPS})
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  INCLUDE_DIRS . graspit_source graspit_source/include graspit_source/src/Collision graspit_source/src/DBase graspit_source/src/DBase/DBPlanner
+  INCLUDE_DIRS . $ENV{GRASPIT} $ENV{GRASPIT}/include $ENV{GRASPIT}/src/Collision $ENV{GRASPIT}/src/DBase $ENV{GRASPIT}/src/DBase/DBPlanner
 #  LIBRARIES test
   CATKIN_DEPENDS ${PACKAGE_DEPS}
 #  DEPENDS system_lib
@@ -27,25 +27,23 @@ catkin_package(
 include_directories(
         ${catkin_INCLUDE_DIRS}
         )
-
-
-add_custom_command(
-  OUTPUT ${CMAKE_SOURCE_DIR}/ros-interactive-manipulation/graspit_simulator/${PROJECT_NAME}/graspit_source/graspit.pro
-  COMMAND svn co svn://svn.code.sf.net/p/graspit/code/trunk -rHEAD graspit_source
-  COMMAND patch -N -d graspit_source -p0 < graspit_project.patch
-  COMMAND patch -N -d graspit_source -p0 < graspit_dbase.patch
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}
-)
-
 add_custom_target(graspit_build ALL
-  DEPENDS ${CMAKE_SOURCE_DIR}/ros-interactive-manipulation/graspit_simulator/${PROJECT_NAME}/graspit_source/graspit.pro
-  COMMAND qmake "EXT_DESTDIR = ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_BIN_DESTINATION}" ${CMAKE_SOURCE_DIR}/ros-interactive-manipulation/graspit_simulator/${PROJECT_NAME}/graspit_source/graspit.pro
-  COMMAND make
+  DEPENDS $ENV{GRASPIT}/graspit.pro 
+  COMMAND cd $ENV{GRASPIT} && qmake graspit.pro && make
+  COMMAND cp $ENV{GRASPIT}/bin/graspit ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_BIN_DESTINATION}/graspit
 )
+
+
+
 
 add_dependencies(graspit_build household_objects_database)
-
-install(DIRECTORY graspit_source/
+install(DIRECTORY $ENV{GRASPIT}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
   PATTERN ".svn" EXCLUDE
 )
+
+#install(PROGRAMS
+#   $ENV{GRASPIT}/bin/graspit
+#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+#)
+
