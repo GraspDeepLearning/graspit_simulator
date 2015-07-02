@@ -7,14 +7,11 @@
 # if the object is already in the world, it will be moved to the origin
 # Other objects in the world will be cleared
 
-# the id of the model to be loaded
+# the name of the model to be loaded
 std_msgs/String model_name
 
-# low threshold for the graps energy, energy lower than this value won't be returned
-float32 energy_low_threshold
-
-# high threshold for the grasp energy, energy higher than this value will be rejected
-float32 energy_high_threshold
+#the pose of the model which should be loaded
+geometry_msgs/Pose model_pose
 
 # if true, then fingertip collision is not allowed for the bad grasp, if false,only fingertip collision grasp will be returned
 bool reject_fingertip_collision
@@ -32,19 +29,19 @@ int32 GENERATE_FAILURE = 1
 int32 result
 
 # if hand_object is in collsion, the grasp_energy will be invalid
-bool hand_object_collision
+bool[] hand_object_collision
 
 # returns a grasp pose based on the request
-geometry_msgs/Pose grasp_pose
+geometry_msgs/Pose[] grasp_pose
 
 # returns the joint angle of the grasp
-float32 grasp_joint_angle
+float32[] grasp_joint_angle
 
 # the calculated grasp_energy, when in collision, the data will be invalid
-float32 grasp_energy
+float32[] grasp_energy
 
 # the clearance between the gripper and the tabletop
-float64 gripper_tabletop_clearance
+float64[] gripper_tabletop_clearance
 
 # the distance between the gripper and the object
-float64 gripper_object_distance
+float64[] gripper_object_distance

@@ -1045,7 +1045,7 @@ bool RosGraspitInterface::generateGraspsCB(graspit_ros_planning_msgs::GenerateGr
 
     // object's pose will coincides with world frame, to simplify everything
     req_load_object.model_name = request.model_name;
-    req_load_object.model_pose = geometry_msgs::Pose();
+    req_load_object.model_pose = request.model_pose;
     req_load_object.model_pose.orientation.w = 1.0;
     req_load_object.clear_other_models = true;
 
@@ -1075,11 +1075,10 @@ bool RosGraspitInterface::generateGraspsCB(graspit_ros_planning_msgs::GenerateGr
     Body *obstacle = NULL;
     if (request.request_tabletop)
     {
-        std::string filename = getenv("GRASPIT") + std::string("/") + request.tabletop_file_name;
-
+        std::string filename = std::string("models/obstacles/") + request.tabletop_file_name;
         for (int i = 0; i < world->getNumBodies(); i++)
-        {
-            if (world->getBody(i)->getFilename().compare(QString(request.tabletop_file_name.c_str())) == 0)
+        {       
+            if (world->getBody(i)->getFilename().compare(QString(filename.c_str())) == 0)
             {
                 obstacle = world->getBody(i);
                 break;
@@ -1102,9 +1101,10 @@ bool RosGraspitInterface::generateGraspsCB(graspit_ros_planning_msgs::GenerateGr
                 ROS_ERROR_STREAM("Tabletop load failed!");
                 return true;
             }
+            std::string name = std::string("models/obstacles/") + request.tabletop_file_name;
             for (int i = 0; i < world->getNumBodies(); i++)
-            {
-                if (world->getBody(i)->getFilename().compare(QString(request.tabletop_file_name.c_str())) == 0)
+            { 
+                if (world->getBody(i)->getFilename().compare(QString(name.c_str())) == 0)
                 {
                     obstacle = world->getBody(i);
                     break;
@@ -1117,7 +1117,7 @@ bool RosGraspitInterface::generateGraspsCB(graspit_ros_planning_msgs::GenerateGr
     GraspableBody *b = world->getGB(0);
     mHandObjectState->setObject(b);
     mHandObjectState->setRefTran(b->getTran());
-    mHandObjectState->setPositionType(SPACE_AXIS_ANGLE);
+    mHandObjectState->setPositionType(SPACE_COMPLETE);
     mHandObjectState->reset();
 
     //init grasp planner
@@ -1145,32 +1145,108 @@ bool RosGraspitInterface::generateGraspsCB(graspit_ros_planning_msgs::GenerateGr
 
     while(mPlanner->getState() == RUNNING)
     {
-        //hackish busy wait
+        //hackish busy wait -> todo listen to qtsignal of egplanner
         sleep(2.0);
     }
 
     ROS_INFO_STREAM("Planner finished with " << mPlanner->getListSize() << " different grasps");
 
+    std::vector<geometry_msgs::Pose> grasp_poses;
+    std::vector<double> gripper_object_distances;
+    std::vector<double> gripper_tabletop_clearances;
+    std::vector<bool> hand_object_collisions;
+    std::vector<float> grasp_energies;
+    std::vector<float> grasp_joint_angles;
     for(int i = 0; i < mPlanner->getListSize(); i++)
     {
         mPlanner->showGrasp(i);
-        sleep(5.0);
-        if(i == 10)
+
+        //joint angles
+        float grasp_joint_angle = 0.0;
+        grasp_joint_angle = gripper_->getDOF(0)->getVal();
+
+        grasp_joint_angles.push_back(grasp_joint_angle);
+
+        const GraspPlanningState* grasp_planning_state = mPlanner->getGrasp(i);
+        //grasp_pose
+        geometry_msgs::Pose pose;
+        const PositionState* position = grasp_planning_state->readPosition();
+        pose.position.x = position->readVariable(QString("Tx")) / 1000.0;
+        pose.position.y = position->readVariable(QString("Ty")) / 1000.0;
+        pose.position.z = position->readVariable(QString("Tz")) / 1000.0;
+
+        const PostureState* posture = grasp_planning_state->readPosture();
+        pose.orientation.w = posture->readVariable(QString("w"));
+        pose.orientation.x = posture->readVariable(QString("x"));
+        pose.orientation.y = posture->readVariable(QString("y"));
+        pose.orientation.z = posture->readVariable(QString("z"));
+
+        grasp_poses.push_back(pose);
+
+
+        //gripper_object_distance
+        double gripper_object_distance = -1;
+        gripper_object_distance = world->getDist(gripper_, b) / 1000.0;
+
+        gripper_object_distances.push_back(gripper_object_distance);
+
+
+        //gripper tabletop_clearancde
+        double gripper_tabletop_clearance = -1;
+        if(request.request_tabletop)
         {
-            ROS_INFO("Showed 10 grasps");
-            return true;
+            gripper_tabletop_clearance = world->getDist(gripper_, obstacle);
+            graspit_ros_planning_msgs::TestGrasp::Response test_collision_response;
+
+            gripperCollisionCheck(obstacle, gripper_, test_collision_response);
+            if (test_collision_response.hand_environment_collision)
+            {
+                //      ROS_WARN_STREAM("Collision with environment detected!, reject it!");
+            }
+
+            if (pose.position.z < 0.0)
+            {
+                gripper_tabletop_clearance = -1.0;
+            }
         }
+        gripper_tabletop_clearances.push_back(gripper_tabletop_clearance);
+
+        //grasp_energy
+        float grasp_energy = 0.0;
+        graspit_ros_planning_msgs::TestGrasp::Response test_grasp_res;
+        computeEnergy(b, gripper_, test_grasp_res);
+        grasp_energy = test_grasp_res.energy_value;
+
+        grasp_energies.push_back(grasp_energy);
+
+
+        //hand object collision
+        bool hand_object_collision = false;
+        if (test_grasp_res.test_result == test_grasp_res.HAND_COLLISION) // collision exists, which should be with the fingertip, we found a bad grasp
+        {
+            if (request.reject_fingertip_collision)
+            {
+                ROS_INFO_STREAM("Collision exists between fingertip and the object, reject it and this should not happen");
+                continue;
+            }
+            else
+            {
+                hand_object_collision = true;
+                ROS_INFO_STREAM("Collision exists between fingertip and the object, accept it");
+                break;
+            }
+        }
+        hand_object_collisions.push_back(hand_object_collision);
     }
 
+    response.grasp_pose = grasp_poses;
+    response.grasp_energy = grasp_energies;
+    response.grasp_joint_angle = grasp_joint_angles;
+    response.gripper_tabletop_clearance = gripper_tabletop_clearances;
+    response.gripper_object_distance = gripper_object_distances;
 
-    //  ROS_INFO_STREAM( "Random grasp pose:" << grasp_random_pose << " grasp joint angle " << gripper_->getDOF(0)->getVal() <<" energy " << test_grasp_res.energy_value );
-    //  ROS_INFO_STREAM("Number of objects "<<world->getNumBodies());
-    //  response.grasp_pose = grasp_random_pose;
-    //  response.grasp_energy = test_grasp_res.energy_value;
-    //  response.grasp_joint_angle = gripper_->getDOF(0)->getVal();
-    //  response.gripper_tabletop_clearance = gripper_tabletop_clearance;
-    //  response.gripper_object_distance = gripper_object_distance;
-    //  response.result = response.GENERATE_SUCCESS;
+
+    response.result = response.GENERATE_SUCCESS;
     return true;
 
 }
