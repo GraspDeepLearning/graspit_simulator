@@ -1175,14 +1175,19 @@ bool RosGraspitInterface::generateGraspsCB(graspit_ros_planning_msgs::GenerateGr
         pose.position.y = position->readVariable(QString("Ty")) / 1000.0;
         pose.position.z = position->readVariable(QString("Tz")) / 1000.0;
 
-        const PostureState* posture = grasp_planning_state->readPosture();
-        pose.orientation.w = posture->readVariable(QString("w"));
-        pose.orientation.x = posture->readVariable(QString("x"));
-        pose.orientation.y = posture->readVariable(QString("y"));
-        pose.orientation.z = posture->readVariable(QString("z"));
+
+//        for (int j=0; j<position->getNumVariables(); j++)
+//        {
+//            fprintf(stderr,"%s = %.2f; ",position->getVariable(j)->getName().toStdString().c_str(),position->getVariable(j)->getValue());
+//        }
+        fprintf(stderr, "\n");
+        pose.orientation.w = position->readVariable(QString("Qw"));
+        pose.orientation.x = position->readVariable(QString("Qx"));
+        pose.orientation.y = position->readVariable(QString("Qy"));
+        pose.orientation.z = position->readVariable(QString("Qz"));
 
         grasp_poses.push_back(pose);
-
+        const PostureState* posture = grasp_planning_state->readPosture();
 
         //gripper_object_distance
         double gripper_object_distance = -1;
