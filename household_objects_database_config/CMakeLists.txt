@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(graspit_ros_planning)
+project(household_objects_database_config)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED graspit graspit_ros_planning_msgs)
+find_package(catkin REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
-find_package(Qt4 REQUIRED)
+
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -77,8 +77,8 @@ find_package(Qt4 REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES test
-#  CATKIN_DEPENDS
+#  LIBRARIES household_objects_database_config
+#  CATKIN_DEPENDS other_catkin_pkg
 #  DEPENDS system_lib
 )
 
@@ -86,34 +86,26 @@ catkin_package(
 ## Build ##
 ###########
 
-include(${QT_USE_FILE})
-
-MESSAGE( STATUS "catkin include dirs: " ${catkin_INCLUDE_DIRS} )
-
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
- include_directories(include ${catkin_INCLUDE_DIRS} ${QT_INCLUDES} )
-
-ADD_DEFINITIONS(${QT_DEFINITIONS})
+# include_directories(include)
 
 ## Declare a cpp library
- add_library(ros_graspit_interface
-   src/ros_graspit_interface.cpp
-   src/main.cpp
- )
+# add_library(household_objects_database_config
+#   src/${PROJECT_NAME}/household_objects_database_config.cpp
+# )
 
 ## Declare a cpp executable
-# add_executable(test_node src/test_node.cpp)
+# add_executable(household_objects_database_config_node src/household_objects_database_config_node.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
- add_dependencies(ros_graspit_interface graspit graspit_ros_planning_msgs ${QT_DEFINITIONS})
+# add_dependencies(household_objects_database_config_node household_objects_database_config_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(ros_graspit_interface
-   ${catkin_LIBRARIES}
-   ${QT_LIBRARIES}
- )
+# target_link_libraries(household_objects_database_config_node
+#   ${catkin_LIBRARIES}
+# )
 
 #############
 ## Install ##
@@ -130,7 +122,7 @@ ADD_DEFINITIONS(${QT_DEFINITIONS})
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS test test_node
+# install(TARGETS household_objects_database_config household_objects_database_config_node
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -155,7 +147,7 @@ ADD_DEFINITIONS(${QT_DEFINITIONS})
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_test.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_household_objects_database_config.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

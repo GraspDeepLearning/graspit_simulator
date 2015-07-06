@@ -54,6 +54,7 @@ class GraspableBody;
 #include <manipulation_msgs/Grasp.h>
 #include <manipulation_msgs/GraspPlanning.h>
 
+
 #include "graspit_ros_planning_msgs/LoadDatabaseModel.h"
 #include "graspit_ros_planning_msgs/LoadObstacle.h"
 #include "graspit_ros_planning_msgs/ClearBodies.h"
@@ -63,7 +64,32 @@ class GraspableBody;
 #include "graspit_ros_planning_msgs/VerifyGrasp.h"
 
 #include "graspit_ros_planning_msgs/LoadLocalModel.h"
+#include <graspit_ros_planning_msgs/LoadLocalGripper.h>
 #include "graspit_ros_planning_msgs/GenerateGrasps.h"
+
+
+#include <boost/foreach.hpp>
+#include <cmath>
+#include <Inventor/actions/SoGetBoundingBoxAction.h>
+
+#include <src/DBase/DBPlanner/ros_database_manager.h>
+#include <src/DBase/graspit_db_model.h>
+#include <src/Collision/collisionStructures.h>
+#include <include/EGPlanner/searchEnergy.h>
+#include <include/mytools.h>
+#include <include/world.h>
+#include <include/body.h>
+#include <include/graspitGUI.h>
+#include <include/ivmgr.h>
+#include <include/scanSimulator.h>
+#include <include/pr2Gripper.h>
+
+#include <sensor_msgs/PointCloud.h>
+#include <sensor_msgs/point_cloud_conversion.h>
+#include <include/EGPlanner/egPlanner.h>
+#include <include/EGPlanner/simAnnPlanner.h>
+#include <include/EGPlanner/searchState.h>
+#include <include/grasp.h>
 
 namespace graspit_ros_planning
 {
@@ -80,146 +106,161 @@ namespace graspit_ros_planning
 class RosGraspitInterface : public Plugin
 {
 private:
-  //! Node handle in the root namespace
-  ros::NodeHandle *root_nh_;
+    //! Asyncspinner so that EG can run
+    ros::AsyncSpinner* async_spinner_;
 
-  //! Node handle in the private namespace
-  ros::NodeHandle *priv_nh_;
 
-  //! A GraspIt database manager used for talking to the database
-  /*! An interesting point is that here we also have to option of using a ROS
+    //! Node handle in the root namespace
+    ros::NodeHandle *root_nh_;
+
+    //! Node handle in the private namespace
+    ros::NodeHandle *priv_nh_;
+
+    //! A GraspIt database manager used for talking to the database
+    /*! An interesting point is that here we also have to option of using a ROS
    interface to the database; pros and cons should be considered in the future. */
-  db_planner::DatabaseManager *db_mgr_;
+    db_planner::DatabaseManager *db_mgr_;
 
-  //! Server for the load model service
-  ros::ServiceServer load_model_srv_;
-  ros::ServiceServer load_local_model_srv_;
+    //! Server for the load model service
+    ros::ServiceServer load_model_srv_;
+    ros::ServiceServer load_local_model_srv_;
 
-  //! Server for the load obstacle service
-  ros::ServiceServer load_obstacle_srv_;
+    //! Server for the load obstacle service
+    ros::ServiceServer load_obstacle_srv_;
 
-  //! Server for the clear bodies service
-  ros::ServiceServer clear_bodies_srv_;
+    //! Server for the clear bodies service
+    ros::ServiceServer clear_bodies_srv_;
 
-  //! Server for the scan simulation service
-  ros::ServiceServer simulate_scan_srv_;
+    //! Server for the scan simulation service
+    ros::ServiceServer simulate_scan_srv_;
 
-  //! Server for the test grasp service
-  ros::ServiceServer test_grasp_srv_;
+    //! Server for the test grasp service
+    ros::ServiceServer test_grasp_srv_;
 
-  //! Server for the grasp planning service
-  ros::ServiceServer grasp_planning_srv_;
+    //! Server for the grasp planning service
+    ros::ServiceServer grasp_planning_srv_;
 
-  //! Server for the generate grasp service
-  ros::ServiceServer generate_grasp_srv_;
-  ros::ServiceServer generate_grasps_srv_;
+    //! Server for the generate grasp service
+    ros::ServiceServer generate_grasp_srv_;
+    ros::ServiceServer generate_grasps_srv_;
 
-  //! Server for the grasp collision checking service
-  ros::ServiceServer verify_grasp_srv_;
+    //! Server for the grasp collision checking service
+    ros::ServiceServer verify_grasp_srv_;
 
-  //! Publisher for simulated scans
-  ros::Publisher scan_publisher_;
+    //! Server for loading local gripper model
+    ros::ServiceServer load_local_gripper_srv_;
 
-  //! Keeps track of all models already retrieved from the database, mapped by their scaled model id
-  std::map<int, GraspitDBModel*> models_;
+    //! Publisher for simulated scans
+    ros::Publisher scan_publisher_;
 
-  //! A GraspIt instance of the PR2 gripper
-  Pr2Gripper2010 *gripper_;
+    //! Keeps track of all models already retrieved from the database, mapped by their scaled model id
+    std::map<int, GraspitDBModel*> models_;
 
-  //! Used for general GrapsPlanning calls; should be a value from graspit_ros_planning_msgs::TestGrasp
-  int default_grasp_test_type_;
+    //! A GraspIt instance of the PR2 gripper
+    Pr2Gripper2010 *pr2_gripper_;
 
-  //! Used for converting energy values fo probabilities; soon to be replaced
-  double default_energy_threshold_;
+    //! An arbritrary loaded gripper
+    Hand* gripper_;
 
-  //!-------------------------- populating the graspit world ------------------------------
 
-  //! Will load a model, or retrieve it from the map of previously loaded models
-  GraspitDBModel* getModel(int model_id);
+    //! Used for general GrapsPlanning calls; should be a value from graspit_ros_planning_msgs::TestGrasp
+    int default_grasp_test_type_;
 
-  //! Loads the gripper info from its file, if not already loaded
-  bool loadGripper();
+    //! Used for converting energy values fo probabilities; soon to be replaced
+    double default_energy_threshold_;
 
-  // ------------------------- helper functions for grasp tests ---------------------------
+    //!-------------------------- populating the graspit world ------------------------------
 
-  //! Checks collisions between the gripper and the environment
-  void gripperCollisionCheck(const Body *object, graspit_ros_planning_msgs::TestGrasp::Response &response);
+    //! Will load a model, or retrieve it from the map of previously loaded models
+    GraspitDBModel* getModel(int model_id);
 
-  //! Performs the grasp test using the grasp energy function 
-  void computeEnergy(Body *object, graspit_ros_planning_msgs::TestGrasp::Response &response);
+    //! Loads the PR2 gripper info from its file, if no OTHER gripper has already been loaded
+    bool loadGripper();
 
-  // ---------------------------------- grasp tests ----------------------------------------
+    // ------------------------- helper functions for grasp tests ---------------------------
 
-  //! Tests a grasp using the direct method
-  void testGraspDirect(const manipulation_msgs::Grasp &grasp, GraspableBody *object,
-                       graspit_ros_planning_msgs::TestGrasp::Response &response);
+    //! Checks collisions between the gripper and the environment
+    void gripperCollisionCheck(const Body *object, Hand* gripper, graspit_ros_planning_msgs::TestGrasp::Response &response);
 
-  //! Tests a grasp using the compliant method
-  void testGraspCompliant(const manipulation_msgs::Grasp &grasp, GraspableBody *object,
-                          graspit_ros_planning_msgs::TestGrasp::Response &response);
+    //! Performs the grasp test using the grasp energy function
+    void computeEnergy(Body *object,  Hand *gripper, graspit_ros_planning_msgs::TestGrasp::Response &response);
 
-  //! Tests a grasp using the direct method
-  void testGraspReactive(const manipulation_msgs::Grasp &grasp, GraspableBody *object,
+    // ---------------------------------- grasp tests ----------------------------------------
+
+    //! Tests a grasp using the direct method
+    void testGraspDirect(const manipulation_msgs::Grasp &grasp, GraspableBody *object,
                          graspit_ros_planning_msgs::TestGrasp::Response &response);
 
-  //! Tests a grasp using the direct method
-  void testGraspRobustReactive(const manipulation_msgs::Grasp &grasp, GraspableBody *object,
-                               graspit_ros_planning_msgs::TestGrasp::Response &response);
+    //! Tests a grasp using the compliant method
+    void testGraspCompliant(const manipulation_msgs::Grasp &grasp, GraspableBody *object,
+                            graspit_ros_planning_msgs::TestGrasp::Response &response);
 
-  // ---------------------------------- callbacks ----------------------------------------
+    //! Tests a grasp using the direct method
+    void testGraspReactive(const manipulation_msgs::Grasp &grasp, GraspableBody *object,
+                           graspit_ros_planning_msgs::TestGrasp::Response &response);
 
-  //! Callback for the load model service
-  bool loadModelCB(graspit_ros_planning_msgs::LoadDatabaseModel::Request &request,
-                   graspit_ros_planning_msgs::LoadDatabaseModel::Response &response);
+    //! Tests a grasp using the direct method
+    void testGraspRobustReactive(const manipulation_msgs::Grasp &grasp, GraspableBody *object,
+                                 graspit_ros_planning_msgs::TestGrasp::Response &response);
 
-  //! Callback for the load obstacle service
-  bool loadObstacleCB(graspit_ros_planning_msgs::LoadObstacle::Request &request,
-                      graspit_ros_planning_msgs::LoadObstacle::Response &response);
+    // ---------------------------------- callbacks ----------------------------------------
 
-  //! Callback for the clear bodies service
-  bool clearBodiesCB(graspit_ros_planning_msgs::ClearBodies::Request &request,
-                     graspit_ros_planning_msgs::ClearBodies::Response &response);
+    //! Callback for the load model service
+    bool loadModelCB(graspit_ros_planning_msgs::LoadDatabaseModel::Request &request,
+                     graspit_ros_planning_msgs::LoadDatabaseModel::Response &response);
 
-  //! Callback for the clear bodies service
-  bool simulateScanCB(graspit_ros_planning_msgs::SimulateScan::Request &request,
-                      graspit_ros_planning_msgs::SimulateScan::Response &response);
+    //! Callback for the load obstacle service
+    bool loadObstacleCB(graspit_ros_planning_msgs::LoadObstacle::Request &request,
+                        graspit_ros_planning_msgs::LoadObstacle::Response &response);
 
-  //! Callback for the detailed, graspit-specific test grasp service
-  bool testGraspCB(graspit_ros_planning_msgs::TestGrasp::Request &request,
-                   graspit_ros_planning_msgs::TestGrasp::Response &response);
+    //! Callback for the clear bodies service
+    bool clearBodiesCB(graspit_ros_planning_msgs::ClearBodies::Request &request,
+                       graspit_ros_planning_msgs::ClearBodies::Response &response);
 
-  //! Callback for the general grasp planning service
-  bool graspPlanningCB(manipulation_msgs::GraspPlanning::Request &request,
-                       manipulation_msgs::GraspPlanning::Response &response);
+    //! Callback for the clear bodies service
+    bool simulateScanCB(graspit_ros_planning_msgs::SimulateScan::Request &request,
+                        graspit_ros_planning_msgs::SimulateScan::Response &response);
 
-  //! Callback for the grasp generation service, for PR2 gripper
-  bool generateGraspCB(graspit_ros_planning_msgs::GenerateGrasp::Request &request,
-                       graspit_ros_planning_msgs::GenerateGrasp::Response &response);
+    //! Callback for the detailed, graspit-specific test grasp service
+    bool testGraspCB(graspit_ros_planning_msgs::TestGrasp::Request &request,
+                     graspit_ros_planning_msgs::TestGrasp::Response &response);
 
-  //! Callback for the grasp verifying service, for PR2 gripper
-  bool verifyGraspCB(graspit_ros_planning_msgs::VerifyGrasp::Request &request,
-                     graspit_ros_planning_msgs::VerifyGrasp::Response &response);
+    //! Callback for the general grasp planning service
+    bool graspPlanningCB(manipulation_msgs::GraspPlanning::Request &request,
+                         manipulation_msgs::GraspPlanning::Response &response);
+
+    //! Callback for the grasp generation service, for PR2 gripper ONLY
+    bool generateGraspCB(graspit_ros_planning_msgs::GenerateGrasp::Request &request,
+                         graspit_ros_planning_msgs::GenerateGrasp::Response &response);
+
+    //! Callback for the grasp verifying service, for PR2 gripper
+    bool verifyGraspCB(graspit_ros_planning_msgs::VerifyGrasp::Request &request,
+                       graspit_ros_planning_msgs::VerifyGrasp::Response &response);
+
+    //! Callback for loading local gripper model
+    bool loadLocalGripperCB(graspit_ros_planning_msgs::LoadLocalGripper::Request &request,
+                            graspit_ros_planning_msgs::LoadLocalGripper::Response &response);
 
 
-  //THESE ARE ADDED FOR GRASP GENERATION
-  //! Callback for the load model service
-  bool loadLocalModelCB(graspit_ros_planning_msgs::LoadLocalModel::Request &request,
-                   graspit_ros_planning_msgs::LoadLocalModel::Response &response);
+    //THESE ARE ADDED FOR GRASP GENERATION
+    //! Callback for the load model service
+    bool loadLocalModelCB(graspit_ros_planning_msgs::LoadLocalModel::Request &request,
+                          graspit_ros_planning_msgs::LoadLocalModel::Response &response);
 
-  //! Callback for the grasp generation service, for PR2 gripper
-  bool generateGraspsCB(graspit_ros_planning_msgs::GenerateGrasps::Request &request,
-                       graspit_ros_planning_msgs::GenerateGrasps::Response &response);
+    //! Callback for the grasp generation service, for PR2 gripper ONLY
+    bool generateGraspsCB(graspit_ros_planning_msgs::GenerateGrasps::Request &request,
+                          graspit_ros_planning_msgs::GenerateGrasps::Response &response);
 
 
 public:
-  //! Inits ROS, but (for now) without passing any arguments
-  RosGraspitInterface();
-  //! Deletes the node handle and the db manager
-  ~RosGraspitInterface();
-  //! Creates the node handles, advertises services, connects to the database
-  virtual int init(int argc, char **argv);
-  //! Simply calls ros::spinOnce() to process the ROS event loop
-  virtual int mainLoop();
+    //! Inits ROS, but (for now) without passing any arguments
+    RosGraspitInterface();
+    //! Deletes the node handle and the db manager
+    ~RosGraspitInterface();
+    //! Creates the node handles, advertises services, connects to the database
+    virtual int init(int argc, char **argv);
+    //! Simply calls ros::spinOnce() to process the ROS event loop
+    virtual int mainLoop();
 };
 
 }
